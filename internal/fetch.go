@@ -47,15 +47,16 @@ func FetchLinks(url string, recursive bool) ([]string, error) {
 	// Check if it is a sitemap index 
 	var index SitemapIndex
 	if err := xml.Unmarshal(data, &index); err == nil && len(index.Sitemaps) > 0 {
-		fmt.Println("Successfully recogniced a sitemap index...")
-
 		if recursive {
 			var allLinks []string
+			fmt.Printf("✅ %v Sitemaps found\n", len(index.Sitemaps))
 			for _, sitemapEntry := range index.Sitemaps {
 				subLinks, err := FetchLinks(sitemapEntry.Loc, recursive)
 				if err != nil {
-					fmt.Printf("⚠️ Warning: Failed to fetch %s: %v\n", sitemapEntry.Loc, err)
+					fmt.Printf("❌ Failed to fetch %s: %v\n", sitemapEntry.Loc, err)
 					continue
+				} else {
+					fmt.Printf("Fetching links from %s\n", sitemapEntry.Loc)
 				}
 				allLinks = append(allLinks, subLinks...)
 			}

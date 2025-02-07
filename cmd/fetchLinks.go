@@ -31,7 +31,6 @@ var fetchLinksCmd = &cobra.Command{
 }
 
 func init() {
-	// TODO: Change to false 
 	fetchLinksCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Recursivly searches for more sitemaps")
 	rootCmd.AddCommand(fetchLinksCmd)
 }

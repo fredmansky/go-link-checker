@@ -21,11 +21,11 @@ var checkLinksCmd = &cobra.Command{
 		links, err := internal.FetchLinks(url, true)
 
 		if err != nil {
-			fmt.Println("Error fetching links:", err)
+			fmt.Println("❌ Error fetching links:", err)
 			return
 		}
 
-		fmt.Printf("Amount of found links: %d\n", len(links))
+		fmt.Printf("✅ Successfully found %d links\n", len(links))
 
 		internal.CheckLinks(links);
 	},

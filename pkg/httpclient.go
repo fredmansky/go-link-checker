@@ -6,16 +6,21 @@ import (
 	"time"
 )
 
-// Globaler HTTP-Client für alle Anfragen
 var HttpClient = &http.Client{
 	Transport: &http.Transport{
-		MaxIdleConns:        500,
+		MaxIdleConns: 1000,
 		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     300 * time.Second,
+		IdleConnTimeout: 60 * time.Second,
+		TLSHandshakeTimeout: 15 * time.Second,
+		ExpectContinueTimeout: 2 * time.Second,
+		ForceAttemptHTTP2: true,
 		DialContext: (&net.Dialer{
-			Timeout:   5 * time.Second,
-			KeepAlive: 60 * time.Second,
+			Timeout: 10 * time.Second,
+			KeepAlive: 180 * time.Second,
+			DualStack: true,
 		}).DialContext,
+		DisableKeepAlives: false,
+		DisableCompression: false,
 	},
-	Timeout: 10 * time.Second,
+	Timeout: 40 * time.Second,
 }
