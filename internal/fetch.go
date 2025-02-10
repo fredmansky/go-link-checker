@@ -3,8 +3,10 @@ package internal
 import (
 	"encoding/xml"
 	"fmt"
-	"io"
 	"github.com/fredmansky/go-link-checker/pkg"
+	"io"
+	"runtime"
+	"sync"
 )
 
 type Sitemap struct {
@@ -44,22 +46,42 @@ func FetchLinks(url string, recursive bool) ([]string, error) {
 		return links, nil
 	}
 
-	// Check if it is a sitemap index 
+	// Check if it is a sitemap index
 	var index SitemapIndex
 	if err := xml.Unmarshal(data, &index); err == nil && len(index.Sitemaps) > 0 {
 		if recursive {
-			var allLinks []string
 			fmt.Printf("✅ %v Sitemaps found\n", len(index.Sitemaps))
-			for _, sitemapEntry := range index.Sitemaps {
-				subLinks, err := FetchLinks(sitemapEntry.Loc, recursive)
-				if err != nil {
-					fmt.Printf("❌ Failed to fetch %s: %v\n", sitemapEntry.Loc, err)
-					continue
-				} else {
-					fmt.Printf("Fetching links from %s\n", sitemapEntry.Loc)
-				}
-				allLinks = append(allLinks, subLinks...)
+
+			var (
+				allLinks []string
+				mu       sync.Mutex
+				wg       sync.WaitGroup
+				sem      = make(chan struct{}, runtime.NumCPU()*10)
+			)
+			for _, entry := range index.Sitemaps {
+				wg.Add(1)
+				// Wait till place is free in waitgroup
+				sem <- struct{}{}
+
+				go func(loc string) {
+					defer wg.Done()
+					defer func() { <-sem }() // Free up space in waitgroup
+
+					subLinks, subErr := FetchLinks(loc, true)
+					if subErr != nil {
+						fmt.Printf("❌ Failed to fetch %s: %v\n", loc, subErr)
+						return
+					}
+					fmt.Printf("Fetching links from %s\n", loc)
+
+					mu.Lock()
+					allLinks = append(allLinks, subLinks...)
+					mu.Unlock()
+				}(entry.Loc)
 			}
+
+			wg.Wait()
+
 			return allLinks, nil
 		}
 
