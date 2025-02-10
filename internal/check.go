@@ -3,9 +3,10 @@ package internal
 import (
 	"fmt"
 	"github.com/fredmansky/go-link-checker/pkg"
+	"net/http"
+	"runtime"
 	"sync"
 	"time"
-	"runtime"
 )
 
 func CheckLinks(links []string) {
@@ -58,19 +59,33 @@ func CheckLinks(links []string) {
 }
 
 func checkLink(url string) bool {
-	for i := 0; i < 3; i++ {
+	const (
+		maxAttempts          = 3
+		rateLimitWaitSeconds = 5
+		defaultWaitSeconds   = 1
+	)
+
+	for i := 0; i < maxAttempts; i++ {
 		resp, err := pkg.HttpClient.Head(url)
-		if err == nil && resp.StatusCode < 400 {
+
+		// Return true if request was successful and no error occurred
+		if err == nil && resp.StatusCode < http.StatusBadRequest {
 			return true
 		}
 
-		if resp.StatusCode == 429 { // "Too Many Requests"
-			fmt.Println("Server rate-limited us! Waiting 5s...")
-			time.Sleep(5 * time.Second)
+		if err != nil {
+			time.Sleep(defaultWaitSeconds * time.Second)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests {
+			fmt.Printf("Server rate-limited us! Waiting %ds...\n", rateLimitWaitSeconds)
+			time.Sleep(rateLimitWaitSeconds * time.Second)
 		} else {
-			time.Sleep(1 * time.Second)
+			time.Sleep(defaultWaitSeconds * time.Second)
 		}
 	}
+
 	return false
 }
 
