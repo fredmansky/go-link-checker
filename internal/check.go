@@ -2,23 +2,32 @@ package internal
 
 import (
 	"fmt"
-	"github.com/fredmansky/go-link-checker/pkg"
-	"net/http"
 	"runtime"
+	"net/http"
 	"sync"
 	"time"
+	"github.com/fredmansky/go-link-checker/pkg"
 )
 
-func CheckLinks(links []string) {
+type BrokenLink struct {
+	url        string
+	StatusCode int
+}
+
+func CheckLinks(links []string, rateLimit int) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var brokenLinks []string
+	var brokenLinks []BrokenLink
 	totalLinks := len(links)
 	checkedLinks := 0
 	checkedLastSecond := 0
 
 	maxConcurrentRequests := runtime.NumCPU() * 10
 	semaphore := make(chan struct{}, maxConcurrentRequests)
+
+	// Rate limiting
+	ticker := time.NewTicker(time.Second / time.Duration(rateLimit))
+	defer ticker.Stop()
 
 	stopProgress := make(chan bool)
 	go showProgress(&checkedLinks, &checkedLastSecond, totalLinks, stopProgress)
@@ -31,9 +40,14 @@ func CheckLinks(links []string) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			if !checkLink(link) {
+			// wait till ticker makes new token available
+			<-ticker.C
+
+			statusCode := checkLink(link)
+
+			if statusCode >= http.StatusBadRequest {
 				mu.Lock()
-				brokenLinks = append(brokenLinks, link)
+				brokenLinks = append(brokenLinks, BrokenLink{url: link, StatusCode: statusCode})
 				mu.Unlock()
 			}
 
@@ -51,14 +65,14 @@ func CheckLinks(links []string) {
 	if brokenLinksLen := len(brokenLinks); brokenLinksLen > 0 {
 		fmt.Printf("\n❌ Not reachable links: %d\n", len(brokenLinks))
 		for _, link := range brokenLinks {
-			fmt.Println(link)
+			fmt.Printf("[%d] %s\n", link.StatusCode, link.url)
 		}
 	} else {
 		fmt.Println("\n✅ All links passed")
 	}
 }
 
-func checkLink(url string) bool {
+func checkLink(url string) int {
 	const (
 		maxAttempts          = 3
 		rateLimitWaitSeconds = 5
@@ -68,25 +82,17 @@ func checkLink(url string) bool {
 	for i := 0; i < maxAttempts; i++ {
 		resp, err := pkg.HttpClient.Head(url)
 
-		// Return true if request was successful and no error occurred
-		if err == nil && resp.StatusCode < http.StatusBadRequest {
-			return true
+		if err == nil {
+			if resp.StatusCode < http.StatusBadRequest {
+				return resp.StatusCode // Success
+			}
+			return resp.StatusCode // Failure
 		}
 
-		if err != nil {
-			time.Sleep(defaultWaitSeconds * time.Second)
-			continue
-		}
-
-		if resp.StatusCode == http.StatusTooManyRequests {
-			fmt.Printf("Server rate-limited us! Waiting %ds...\n", rateLimitWaitSeconds)
-			time.Sleep(rateLimitWaitSeconds * time.Second)
-		} else {
-			time.Sleep(defaultWaitSeconds * time.Second)
-		}
+		time.Sleep(defaultWaitSeconds * time.Second)
 	}
 
-	return false
+	return 0
 }
 
 func showProgress(checked *int, checkedLastSecond *int, total int, stop chan bool) {

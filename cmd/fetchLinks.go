@@ -6,8 +6,6 @@ import (
 	"github.com/fredmansky/go-link-checker/internal"
 )
 
-var recursive bool 
-
 var fetchLinksCmd = &cobra.Command{
 	Use:   "fetch-links [URL]",
 	Short: "Returns all URLs based on the provided website",
@@ -15,7 +13,7 @@ var fetchLinksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		url := args[0]
 		fmt.Println("Fetching links from:", url)
-		links, err := internal.FetchLinks(url, recursive)
+		links, err := internal.FetchLinks(url, true, rateLimit)
 
 		if err != nil {
 			fmt.Println("Error fetching links:", err)
@@ -31,6 +29,6 @@ var fetchLinksCmd = &cobra.Command{
 }
 
 func init() {
-	fetchLinksCmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Recursivly searches for more sitemaps")
+	fetchLinksCmd.Flags().IntVarP(&rateLimit, "rate-limit", "l", 200, "Limit link checks per second")
 	rootCmd.AddCommand(fetchLinksCmd)
 }

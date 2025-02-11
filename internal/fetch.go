@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/fredmansky/go-link-checker/pkg"
 	"io"
-	"runtime"
 	"sync"
 )
 
@@ -23,7 +22,7 @@ type SitemapEntry struct {
 	Loc string `xml:"loc"`
 }
 
-func FetchLinks(url string, recursive bool) ([]string, error) {
+func FetchLinks(url string, recursive bool, maxRequests int) ([]string, error) {
 	resp, err := pkg.HttpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("error accessing sitemap: %v", err)
@@ -56,7 +55,7 @@ func FetchLinks(url string, recursive bool) ([]string, error) {
 				allLinks []string
 				mu       sync.Mutex
 				wg       sync.WaitGroup
-				sem      = make(chan struct{}, runtime.NumCPU()*10)
+				sem      = make(chan struct{}, maxRequests)
 			)
 			for _, entry := range index.Sitemaps {
 				wg.Add(1)
@@ -67,7 +66,7 @@ func FetchLinks(url string, recursive bool) ([]string, error) {
 					defer wg.Done()
 					defer func() { <-sem }() // Free up space in waitgroup
 
-					subLinks, subErr := FetchLinks(loc, true)
+					subLinks, subErr := FetchLinks(loc, true, maxRequests)
 					if subErr != nil {
 						fmt.Printf("❌ Failed to fetch %s: %v\n", loc, subErr)
 						return
