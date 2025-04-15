@@ -2,16 +2,17 @@ package internal
 
 import (
 	"fmt"
-	"runtime"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 	"github.com/fredmansky/go-link-checker/pkg"
 )
 
 type BrokenLink struct {
-	url        string
-	StatusCode int
+	url          string
+	StatusCode   int
+	ResponseTime time.Duration
 }
 
 func CheckLinks(links []string, rateLimit int) {
@@ -21,6 +22,8 @@ func CheckLinks(links []string, rateLimit int) {
 	totalLinks := len(links)
 	checkedLinks := 0
 	checkedLastSecond := 0
+	var totalResponseTime time.Duration
+	successfulRequests := 0 // Nur erfolgreiche Requests zählen
 
 	maxConcurrentRequests := runtime.NumCPU() * 10
 	semaphore := make(chan struct{}, maxConcurrentRequests)
@@ -32,6 +35,8 @@ func CheckLinks(links []string, rateLimit int) {
 	stopProgress := make(chan bool)
 	go showProgress(&checkedLinks, &checkedLastSecond, totalLinks, stopProgress)
 
+	startTime := time.Now() // Startzeitpunkt für den gesamten Prozess
+
 	for _, link := range links {
 		wg.Add(1)
 		semaphore <- struct{}{}
@@ -40,18 +45,18 @@ func CheckLinks(links []string, rateLimit int) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			// wait till ticker makes new token available
+			// Warte auf nächstes Rate-Limit-Intervall
 			<-ticker.C
 
-			statusCode := checkLink(link)
-
-			if statusCode >= http.StatusBadRequest {
-				mu.Lock()
-				brokenLinks = append(brokenLinks, BrokenLink{url: link, StatusCode: statusCode})
-				mu.Unlock()
-			}
+			statusCode, responseTime := checkLink(link)
 
 			mu.Lock()
+			if statusCode >= http.StatusBadRequest {
+				brokenLinks = append(brokenLinks, BrokenLink{url: link, StatusCode: statusCode, ResponseTime: responseTime})
+			} else {
+				totalResponseTime += responseTime
+				successfulRequests++
+			}
 			checkedLinks++
 			checkedLastSecond++
 			mu.Unlock()
@@ -59,40 +64,53 @@ func CheckLinks(links []string, rateLimit int) {
 	}
 
 	wg.Wait()
-
 	stopProgress <- true
 
-	if brokenLinksLen := len(brokenLinks); brokenLinksLen > 0 {
-		fmt.Printf("\n❌ Not reachable links: %d\n", len(brokenLinks))
+	// Gesamtzeit berechnen
+	elapsed := time.Since(startTime).Seconds()
+	requestsPerSecond := float64(checkedLinks) / elapsed
+
+	// **Korrekte Berechnung der durchschnittlichen Antwortzeit**
+	var avgResponseTime float64
+	if successfulRequests > 0 {
+		avgResponseTime = totalResponseTime.Seconds() / float64(successfulRequests)
+	}
+
+	fmt.Printf("\n📊 Durchschnittliche Anfragen pro Sekunde: %.2f\n", requestsPerSecond)
+	fmt.Printf("⏳ Durchschnittliche Antwortzeit (nur erfolgreiche Anfragen): %.2f Sekunden\n", avgResponseTime)
+
+	if len(brokenLinks) > 0 {
+		fmt.Printf("\n❌ Nicht erreichbare Links: %d\n", len(brokenLinks))
 		for _, link := range brokenLinks {
-			fmt.Printf("[%d] %s\n", link.StatusCode, link.url)
+			fmt.Printf("[%d] %s (⏱️ %.2fs)\n", link.StatusCode, link.url, link.ResponseTime.Seconds())
 		}
 	} else {
-		fmt.Println("\n✅ All links passed")
+		fmt.Println("\n✅ Alle Links sind erreichbar")
 	}
 }
 
-func checkLink(url string) int {
+func checkLink(url string) (int, time.Duration) {
 	const (
-		maxAttempts          = 3
-		rateLimitWaitSeconds = 5
-		defaultWaitSeconds   = 1
+		maxAttempts        = 3
+		defaultWaitSeconds = 1
 	)
 
 	for i := 0; i < maxAttempts; i++ {
+		start := time.Now()
 		resp, err := pkg.HttpClient.Head(url)
+		responseTime := time.Since(start)
 
 		if err == nil {
 			if resp.StatusCode < http.StatusBadRequest {
-				return resp.StatusCode // Success
+				return resp.StatusCode, responseTime // Erfolg
 			}
-			return resp.StatusCode // Failure
+			return resp.StatusCode, responseTime // Fehlerhafte Antwort
 		}
 
 		time.Sleep(defaultWaitSeconds * time.Second)
 	}
 
-	return 0
+	return 0, 0
 }
 
 func showProgress(checked *int, checkedLastSecond *int, total int, stop chan bool) {
@@ -107,7 +125,7 @@ func showProgress(checked *int, checkedLastSecond *int, total int, stop chan boo
 			progress := (*checked * 100) / total
 			lps := *checkedLastSecond
 			*checkedLastSecond = 0
-			fmt.Printf("\rProgress: %d%% | LPS %d links/sec  ", progress, lps) // spaces needed to prevent wrong output (secc)
+			fmt.Printf("\rProgress: %d%% | LPS %d links/sec  ", progress, lps)
 		}
 	}
 }
