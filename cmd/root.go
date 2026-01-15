@@ -7,7 +7,13 @@ package cmd
 import (
 	"os"
 
+	"github.com/fredmansky/go-link-checker/pkg"
 	"github.com/spf13/cobra"
+)
+
+var (
+	username string
+	password string
 )
 
 
@@ -29,15 +35,16 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
+	// Basic Auth flags (persistent = available for all subcommands)
+	rootCmd.PersistentFlags().StringVarP(&username, "username", "u", "", "Username for Basic Auth")
+	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "Password for Basic Auth")
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.go-link-checker.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// Set credentials before any command runs
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if username != "" && password != "" {
+			pkg.SetBasicAuth(username, password)
+		}
+	}
 }
 
 

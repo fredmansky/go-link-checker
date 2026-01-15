@@ -24,10 +24,25 @@ go run main.go check-links [URL]
 
 For example: `go run main.go check-links https://fredmansky.com/sitemap.xml -l 100`
 
-📌 **What does `-l` (`--rate-limit`) do?**  
-- Limits the number of **requests per second** (LPS).  
-- **Example:** `-l 100` means **100 links are checked per second**.  
-- Default: `200`  
+📌 **What does `-l` (`--rate-limit`) do?**
+- Limits the number of **requests per second** (LPS).
+- **Example:** `-l 100` means **100 links are checked per second**.
+- Default: `200`
+
+### Basic Authentication
+
+For password-protected sitemaps, use the `-u` and `-p` flags:
+
+```bash
+go run main.go check-links [URL] -u [USERNAME] -p [PASSWORD]
+```
+
+For example: `go run main.go check-links https://stage.fredmansky.fredmansky.com/sitemap.xml -u username -p password`
+
+| Flag | Long | Description |
+|------|------|-------------|
+| `-u` | `--username` | Username for Basic Auth |
+| `-p` | `--password` | Password for Basic Auth |
 
 ---
 
@@ -47,6 +62,12 @@ docker run fredmansky/go-link-checker check-links [URL]
 ```
 
 For example: `docker run fredmansky/go-link-checker check-links https://fredmansky.com/sitemap.xml`
+
+### Basic Authentication (Docker)
+
+```bash
+docker run fredmansky/go-link-checker check-links [URL] -u [USERNAME] -p [PASSWORD]
+```
 
 ---
 

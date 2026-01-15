@@ -74,15 +74,17 @@ func CheckLinks(links []string, rateLimit int) {
 
 func checkLink(url string) int {
 	const (
-		maxAttempts          = 3
-		rateLimitWaitSeconds = 5
-		defaultWaitSeconds   = 1
+		maxAttempts        = 3
+		defaultWaitSeconds = 1
 	)
 
 	for i := 0; i < maxAttempts; i++ {
-		resp, err := pkg.HttpClient.Head(url)
+		resp, err := pkg.Head(url)
 
 		if err == nil {
+			// Close body to allow connection reuse (critical for performance with Basic Auth)
+			resp.Body.Close()
+
 			if resp.StatusCode < http.StatusBadRequest {
 				return resp.StatusCode // Success
 			}

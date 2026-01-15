@@ -23,7 +23,7 @@ type SitemapEntry struct {
 }
 
 func FetchLinks(url string, recursive bool, maxRequests int) ([]string, error) {
-	resp, err := pkg.HttpClient.Get(url)
+	resp, err := pkg.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("error accessing sitemap: %v", err)
 	}
